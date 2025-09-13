@@ -9,6 +9,7 @@ module pool::sui_pool {
 
     const EInsufficientBalance: u64 = 1;
     const EInvalidAmount: u64 = 2;
+    const EPoolEmpty: u64 = 3;
 
     struct Pool has key {
         id: UID,
@@ -39,8 +40,9 @@ module pool::sui_pool {
         transfer::share_object(pool);
     }
 
-    /// Deposit a specific amount of SUI into the pool
-    public entry fun deposit_amount(
+    /// Deposit SUI into the pool - automatically splits the exact amount
+    /// Just pass any coin and the amount you want to deposit
+    public entry fun deposit(
         pool: &mut Pool,
         payment: &mut Coin<SUI>,
         amount: u64,
@@ -65,7 +67,7 @@ module pool::sui_pool {
     }
 
     /// Withdraw a specific amount of SUI from the pool
-    public entry fun withdraw_amount(
+    public entry fun withdraw(
         pool: &mut Pool,
         amount: u64,
         ctx: &mut TxContext
@@ -93,7 +95,7 @@ module pool::sui_pool {
         ctx: &mut TxContext
     ) {
         let amount = balance::value(&pool.balance);
-        assert!(amount > 0, EInvalidAmount);
+        assert!(amount > 0, EPoolEmpty);
 
         let withdraw_balance = balance::withdraw_all(&mut pool.balance);
         let withdraw_coin = coin::from_balance(withdraw_balance, ctx);
