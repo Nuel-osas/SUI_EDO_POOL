@@ -45,7 +45,7 @@ module pool::sui_pool {
         transfer::share_object(pool);
     }
 
-    public fun deposit(
+    public entry fun deposit(
         pool: &mut Pool,
         coin: Coin<SUI>,
         ctx: &mut TxContext
@@ -73,7 +73,7 @@ module pool::sui_pool {
         transfer::transfer(user_deposit, tx_context::sender(ctx));
     }
 
-    public fun withdraw(
+    public entry fun withdraw(
         pool: &mut Pool,
         user_deposit: UserDeposit,
         ctx: &mut TxContext
@@ -97,7 +97,7 @@ module pool::sui_pool {
         transfer::public_transfer(withdraw_coin, tx_context::sender(ctx));
     }
 
-    public fun withdraw_partial(
+    public entry fun withdraw_partial(
         pool: &mut Pool,
         user_deposit: &mut UserDeposit,
         withdraw_amount: u64,
