@@ -16,12 +16,6 @@ module pool::sui_pool {
         total_deposits: u64,
     }
 
-    struct UserDeposit has key, store {
-        id: UID,
-        owner: address,
-        amount: u64,
-    }
-
     struct DepositEvent has copy, drop {
         pool_id: address,
         user: address,
@@ -45,23 +39,22 @@ module pool::sui_pool {
         transfer::share_object(pool);
     }
 
-    public entry fun deposit(
+    /// Deposit a specific amount of SUI into the pool
+    public entry fun deposit_amount(
         pool: &mut Pool,
-        coin: Coin<SUI>,
+        payment: &mut Coin<SUI>,
+        amount: u64,
         ctx: &mut TxContext
     ) {
-        let amount = coin::value(&coin);
         assert!(amount > 0, EInvalidAmount);
+        assert!(coin::value(payment) >= amount, EInsufficientBalance);
 
-        let coin_balance = coin::into_balance(coin);
+        // Split the exact amount from the payment coin
+        let deposit_coin = coin::split(payment, amount, ctx);
+        let coin_balance = coin::into_balance(deposit_coin);
+
         balance::join(&mut pool.balance, coin_balance);
         pool.total_deposits = pool.total_deposits + amount;
-
-        let user_deposit = UserDeposit {
-            id: object::new(ctx),
-            owner: tx_context::sender(ctx),
-            amount,
-        };
 
         event::emit(DepositEvent {
             pool_id: object::uid_to_address(&pool.id),
@@ -69,17 +62,15 @@ module pool::sui_pool {
             amount,
             timestamp: tx_context::epoch_timestamp_ms(ctx),
         });
-
-        transfer::transfer(user_deposit, tx_context::sender(ctx));
     }
 
-    public entry fun withdraw(
+    /// Withdraw a specific amount of SUI from the pool
+    public entry fun withdraw_amount(
         pool: &mut Pool,
-        user_deposit: UserDeposit,
+        amount: u64,
         ctx: &mut TxContext
     ) {
-        let UserDeposit { id, owner, amount } = user_deposit;
-        assert!(owner == tx_context::sender(ctx), EInsufficientBalance);
+        assert!(amount > 0, EInvalidAmount);
         assert!(balance::value(&pool.balance) >= amount, EInsufficientBalance);
 
         let withdraw_balance = balance::split(&mut pool.balance, amount);
@@ -93,46 +84,38 @@ module pool::sui_pool {
             timestamp: tx_context::epoch_timestamp_ms(ctx),
         });
 
-        object::delete(id);
         transfer::public_transfer(withdraw_coin, tx_context::sender(ctx));
     }
 
-    public entry fun withdraw_partial(
+    /// Withdraw all SUI from the pool
+    public entry fun withdraw_all(
         pool: &mut Pool,
-        user_deposit: &mut UserDeposit,
-        withdraw_amount: u64,
         ctx: &mut TxContext
     ) {
-        assert!(user_deposit.owner == tx_context::sender(ctx), EInsufficientBalance);
-        assert!(user_deposit.amount >= withdraw_amount, EInsufficientBalance);
-        assert!(balance::value(&pool.balance) >= withdraw_amount, EInsufficientBalance);
-        assert!(withdraw_amount > 0, EInvalidAmount);
+        let amount = balance::value(&pool.balance);
+        assert!(amount > 0, EInvalidAmount);
 
-        user_deposit.amount = user_deposit.amount - withdraw_amount;
-
-        let withdraw_balance = balance::split(&mut pool.balance, withdraw_amount);
+        let withdraw_balance = balance::withdraw_all(&mut pool.balance);
         let withdraw_coin = coin::from_balance(withdraw_balance, ctx);
-        pool.total_deposits = pool.total_deposits - withdraw_amount;
+        pool.total_deposits = 0;
 
         event::emit(WithdrawEvent {
             pool_id: object::uid_to_address(&pool.id),
             user: tx_context::sender(ctx),
-            amount: withdraw_amount,
+            amount,
             timestamp: tx_context::epoch_timestamp_ms(ctx),
         });
 
         transfer::public_transfer(withdraw_coin, tx_context::sender(ctx));
     }
 
+    /// Get the current balance of the pool
     public fun get_pool_balance(pool: &Pool): u64 {
         balance::value(&pool.balance)
     }
 
+    /// Get the total deposits made to the pool
     public fun get_total_deposits(pool: &Pool): u64 {
         pool.total_deposits
-    }
-
-    public fun get_user_deposit_amount(user_deposit: &UserDeposit): u64 {
-        user_deposit.amount
     }
 }
